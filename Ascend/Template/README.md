@@ -15,14 +15,14 @@
   - [开始构建](#开始构建)
 
 # 获取基础镜像
-通过dockerhub或其他镜像站获取，以dockerhub为例，执行
+通过dockerhub或其他镜像站获取，以 `dockerhub` 为例，执行
 ```sh
 docker pull ubuntu:22.04
 ```
 注：若无额外说明，默认 `base` 镜像均为 `ubuntu:22.04`。
 
 # 检查基础镜像
-通过以下命令检查base镜像是否正常拉取到本地，执行
+通过以下命令检查 `base` 镜像是否正常拉取到本地，执行
 ```sh
 docker images | grep ubuntu
 ```
@@ -96,7 +96,7 @@ the/path/of/workingdir
 
 在 `the/path/of/workingdir` 目录，执行以下 `python` 代码，
 ```python
-# python原生自带http server，数字表示所用端口，可根据实际情况更换；
+# python 原生自带 http server，数字表示所用端口，可根据实际情况更换；
 python3 -m http.server <port>
 ```
 这里，默认使用 `3000` 作为 `http.server` 启用端口，
@@ -111,7 +111,7 @@ python3 -m http.server 3000
 ```sh
 wget -q http://172.17.0.1:<port>/xxx -P /WORKDIR
 ```
-若 http.server 默认使用 3000 作为 http.server 启用端口，则
+若 `http.server` 默认使用 3000 作为 `http.server` 启用端口，则
 ```sh
 wget -q http://172.17.0.1:3000/xxx -P /WORKDIR
 ```
