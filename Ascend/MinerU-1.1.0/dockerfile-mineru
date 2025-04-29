@@ -179,14 +179,16 @@ RUN wget -q http://172.17.0.1:3000/magic_pdf-1.1.0-py3-none-any.whl -P /home/min
 ###########################
 FROM magicpdf AS mineru
 
+   #===========
    # wget -q http://172.17.0.1:3000/mineru-modelscope.tar -P /home/mineru && \
    # tar -xzvf mineru-modelscope.tar -C /home/mineru/.cache/ && \
    # rm -f mineru-modelscope.tar && \
-RUN wget -q http://172.17.0.1:3000/paddleocr.tar -P /home/mineru && \
-    tar -xzvf paddleocr.tar -C /home/mineru/ && \
-    rm -f paddleocr.tar && \
-    #===========
-    wget -q http://172.17.0.1:3000/magic-pdf.json -P /home/mineru && \
+   #===========
+   # wget -q http://172.17.0.1:3000/paddleocr.tar -P /home/mineru && \
+   # tar -xzvf paddleocr.tar -C /home/mineru/ && \
+   # rm -f paddleocr.tar && \
+   #===========
+RUN wget -q http://172.17.0.1:3000/magic-pdf.json -P /home/mineru && \
     wget -q http://172.17.0.1:3000/doc_analyze_by_custom_model.py -P /home/mineru && \
     mv ~/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/doc_analyze_by_custom_model.py ~/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/doc_analyze_by_custom_model.py.bak && \
     mv ~/doc_analyze_by_custom_model.py ~/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/ && \
