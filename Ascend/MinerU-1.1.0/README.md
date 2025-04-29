@@ -1,9 +1,11 @@
 # MinerU-1.1.0 构建工程使用指导
 以 `dockerbuild/Ascend/Template/README.md` 作为镜像工程使用标准参考，准备工作目录及启动工程构建脚本，
-[dockerbuild/Ascend/Template/README.md](#https://github.com/stephenfuyuxin/dockerbuild/blob/main/Ascend/Template/README.md)
+
+[README.md](#https://github.com/stephenfuyuxin/dockerbuild/blob/main/Ascend/Template/README.md)
 
 模型 `MinerU-1.1.0` 相关操作参考 `npuAdapter/MinerU-1.1.0/README.md` ，
-[npuAdapter/MinerU-1.1.0/README.md](#https://github.com/stephenfuyuxin/npuAdapter/blob/main/MinerU-1.1.0/README.md)
+
+[README.md](#https://github.com/stephenfuyuxin/npuAdapter/blob/main/MinerU-1.1.0/README.md)
 
 # 预先准备
 **表1** MinerU-1.1.0 预先准备
