@@ -1,0 +1,241 @@
+############################
+# From Ubuntu22.04 AS base #
+############################
+FROM ubuntu:22.04 AS base
+LABEL maintainer="fuyuxin"
+
+ARG UBUNTU_VERSION=22.04
+ARG ARCH
+ARG DEVICE
+ARG PYTHON_VERSION
+LABEL description="Image for ${DEVICE} based on Ubuntu${UBUNTU_VERSION} ${ARCH}"
+
+RUN groupadd -g 1001 HwHiAiUser && \
+    useradd -d /home/HwHiAiUser -m -u 1001 -g 1001 -s /bin/bash HwHiAiUser && \
+    chmod -R 750 /home/HwHiAiUser
+
+USER root
+WORKDIR /root
+
+ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64/driver:/usr/local/Ascend/driver/lib64/common:$LD_LIBRARY_PATH \
+    TZ=Asia/Shanghai \
+    LANG=en_US.UTF-8 \
+    LANGUAGE=en_US:en \
+    LC_ALL=en_US.UTF-8
+
+RUN apt-get clean && apt-get update && apt-get install --no-install-recommends -y wget && \
+    mv /etc/apt/sources.list /etc/apt/sources.list.bak && \
+    wget -q http://172.17.0.1:3000/sources.list -P /etc/apt/ && \
+    apt-get clean && apt-get update && \
+    apt-get install --no-install-recommends -y gcc-9 g++-9 && \
+    apt-get install --no-install-recommends -y vim-tiny vim sudo git wget zip unzip tar curl gzip && \
+    apt-get install --no-install-recommends -y make cmake zlib1g zlib1g-dev openssl libsqlite3-dev lsb-release openssh-server && \
+    apt-get install --no-install-recommends -y libssl-dev libffi-dev libbz2-dev liblzma-dev libxslt1-dev pciutils libblas-dev && \
+    apt-get install --no-install-recommends -y gfortran libblas3 tree sox iputils-ping ffmpeg xz-utils locales && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libreoffice gdb && \
+    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 110 && \
+    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 110 && \
+    update-alternatives --config gcc && \
+    update-alternatives --config g++ && \
+    locale-gen en_US.UTF-8 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+##########################
+# From base AS pythonpip #
+##########################
+FROM base AS pythonpip
+
+ARG ARCH
+ARG DEVICE
+ARG PYTHON_VERSION
+
+# Python3 install and configuraiton. Install Python3.x according the 'ARG' PYTHON_VERSION, below:
+RUN wget -q http://172.17.0.1:3000/Python-${PYTHON_VERSION}.tar.xz -P /root && \
+    tar -xf Python-${PYTHON_VERSION}.tar.xz && \
+    cd Python-${PYTHON_VERSION} && ./configure --prefix=/usr/local/python${PYTHON_VERSION} --enable-shared --enable-loadable-sqlite-extensions --enable-optimizations && \
+    make -j8 && make install && \
+    ln -sf /usr/local/python${PYTHON_VERSION}/bin/python3 /usr/bin/python3 && \
+    ln -sf /usr/local/python${PYTHON_VERSION}/bin/python3 /usr/bin/python && \
+    ln -sf /usr/local/python${PYTHON_VERSION}/bin/pip3 /usr/bin/pip3 && \
+    ln -sf /usr/local/python${PYTHON_VERSION}/bin/pip3 /usr/bin/pip && \
+    cd .. && \
+    rm -rf Python-* && \
+    #===========
+    # Pip3 source and install. Configure the pip3 source. An example is provided below:
+    mkdir -p ~/.pip  && \
+    echo '[global] \n\
+    index-url = https://mirrors.huaweicloud.com/repository/pypi/simple\n\
+    trusted-host = mirrors.huaweicloud.com\n\
+    timeout = 120' >> ~/.pip/pip.conf
+ENV PATH=/usr/local/python${PYTHON_VERSION}/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/python${PYTHON_VERSION}/lib:$LD_LIBRARY_PATH
+##########################
+# FROM pythonpip AS cann #
+##########################
+FROM pythonpip AS cann
+
+ARG DEVICE
+ARG ARCH
+ARG CANN_VERSION
+
+# CANN-TOOLKIT env
+#ASCEND_TOOLKIT_HOME=/home/HwHiAiUser/Ascend/ascend-toolkit/latest
+ENV ASCEND_TOOLKIT_HOME=/usr/local/Ascend/ascend-toolkit/latest \
+    LD_LIBRARY_PATH=${ASCEND_TOOLKIT_HOME}/lib64:${ASCEND_TOOLKIT_HOME}/lib64/plugin/opskernel:$LD_LIBRARY_PATH \
+    LD_LIBRARY_PATH=${ASCEND_TOOLKIT_HOME}/lib64/plugin/nnengine:${ASCEND_TOOLKIT_HOME}/opp/built-in/op_impl/ai_core/tbe/op_tiling/lib/linux/${ARCH}:$LD_LIBRARY_PATH \
+    LD_LIBRARY_PATH=${ASCEND_TOOLKIT_HOME}/tools/aml/lib64:${ASCEND_TOOLKIT_HOME}/tools/aml/lib64/plugin:$LD_LIBRARY_PATH \
+    PYTHONPATH=${ASCEND_TOOLKIT_HOME}/python/site-packages:${ASCEND_TOOLKIT_HOME}/opp/built-in/op_impl/ai_core/tbe:$PYTHONPATH \
+    PATH=$PATH:${ASCEND_TOOLKIT_HOME}/bin:${ASCEND_TOOLKIT_HOME}/compiler/ccec_compiler/bin:${ASCEND_TOOLKIT_HOME}/tools/ccec_compiler/bin \
+    ASCEND_AICPU_PATH=${ASCEND_TOOLKIT_HOME} \
+    ASCEND_OPP_PATH=${ASCEND_TOOLKIT_HOME}/opp \
+    TOOLCHAIN_HOME=${ASCEND_TOOLKIT_HOME}/toolkit \
+    ASCEND_HOME_PATH=${ASCEND_TOOLKIT_HOME}
+RUN wget -q http://172.17.0.1:3000/Ascend-cann-toolkit_${CANN_VERSION}_linux-${ARCH}.run -P /root && \
+    wget -q http://172.17.0.1:3000/Ascend-cann-kernels-${DEVICE}_${CANN_VERSION}_linux-${ARCH}.run -P /root && \
+    wget -q http://172.17.0.1:3000/install_cann.sh -P /root && \
+    #===========
+    bash install_cann.sh && \
+    #===========
+    rm -rf ~/*.run ~/install_*.sh
+####################
+# FROM cann AS pta #
+####################
+FROM cann AS pta
+
+ARG DEVICE
+ARG ARCH
+ARG TORCH_VERSION
+ARG PY_VERSION
+
+# ENV PATH=$PATH:/home/HwHiAiUser/.local/bin
+
+RUN wget -q http://172.17.0.1:3000/torch-${TORCH_VERSION}-cp${PY_VERSION}-cp${PY_VERSION}-manylinux_2_17_${ARCH}.manylinux2014_${ARCH}.whl -P /root && \
+    wget -q http://172.17.0.1:3000/torch_npu-${TORCH_VERSION}.post8-cp${PY_VERSION}-cp${PY_VERSION}-manylinux_2_17_${ARCH}.manylinux2014_${ARCH}.whl -P /root && \
+    wget -q http://172.17.0.1:3000/requirements-${TORCH_VERSION}.txt -P /root && \
+    wget -q http://172.17.0.1:3000/install_pta.sh -P /root && \
+    #===========
+    pip3 install --upgrade pip && \
+    pip3 install -r requirements-${TORCH_VERSION}.txt --no-cache-dir && \
+    #===========
+    bash install_pta.sh && \
+    pip cache purge && \
+    rm -rf ~/torch*.whl ~/requirements*.txt ~/install_*.sh && \
+    rm -rf ~/.cache/pip
+##############################
+# FROM pta AS torchvisionnpu #
+##############################
+FROM pta AS torchvisionnpu
+
+RUN wget -q http://172.17.0.1:3000/requirements-torchvision_npu.txt -P /root && \
+    wget -q http://172.17.0.1:3000/torchvision_npu-0.16.0+git450a7cb-cp310-cp310-linux_aarch64.whl -P /root && \
+    pip3 install -r requirements-torchvision_npu.txt --no-cache-dir && \
+    pip3 install torchvision_npu-0.16.0+git450a7cb-cp310-cp310-linux_aarch64.whl && \
+    pip cache purge && \
+    rm -rf ~/requirements*.txt ~/torchvision_npu-0.16.*.whl && \
+    rm -rf ~/.cache/pip
+###############################
+# FROM torchvisionnpu AS msit #
+###############################
+FROM torchvisionnpu AS msit
+
+RUN wget -q http://172.17.0.1:3000/msit.tar -P /root && \
+    tar -xzvf msit.tar && \
+    cd ~/msit/msit/ && \
+    pip install wheel==0.45.1 && \
+    pip3 install . && \
+    msit download all --dest ./pkg-cache && \
+    cd ~ && \
+    rm -rf ~/*.tar ~/msit && \
+    rm -rf ~/.cache/pip
+###########################
+# FROM msit AS detectron2 #
+###########################
+FROM msit AS detectron2
+
+RUN wget -q http://172.17.0.1:3000/detec.tar -P /root && \
+    tar -xzvf detec.tar && \
+    cd ~/detectron2 && \
+    python3 -m pip install -e . && \
+    rm -f ~/*.tar && \
+    rm -rf ~/.cache/pip
+###################################
+# FROM detectron2 AS requirements #
+###################################
+FROM detectron2 AS requirements
+
+RUN wget -q http://172.17.0.1:3000/requirements-model.txt -P /root && \
+    pip3 install -r requirements-model.txt --no-deps && \
+    pip cache purge && \
+    rm -f requirements-model.txt && \
+    rm -rf ~/.cache/pip
+#################################
+# FROM requirements AS magicpdf #
+#################################
+FROM requirements AS magicpdf
+
+RUN wget -q http://172.17.0.1:3000/magic_pdf-1.1.0-py3-none-any.whl -P /root && \
+    pip3 install magic_pdf-1.1.0-py3-none-any.whl --no-deps && \
+    pip cache purge && \
+    rm -f magic_pdf-1.1.0-py3-none-any.whl && \
+    rm -rf ~/.cache/pips
+###########################
+# FROM magicpdf AS mineru #
+###########################
+FROM magicpdf AS mineru
+
+    #===========
+    # wget -q http://172.17.0.1:3000/mineru-modelscope.tar -P /root && \
+    # tar -xzvf mineru-modelscope.tar -C /root/.cache/ && \
+    # rm -f mineru-modelscope.tar && \
+    #===========
+    # wget -q http://172.17.0.1:3000/paddleocr.tar -P /root && \
+    # tar -xzvf paddleocr.tar -C /root/ && \
+    # rm -f paddleocr.tar && \
+    #===========
+RUN wget -q http://172.17.0.1:3000/magic-pdf.json -P /root && \
+    wget -q http://172.17.0.1:3000/doc_analyze_by_custom_model.py -P /root && \
+    mv /usr/local/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/doc_analyze_by_custom_model.py /usr/local/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/doc_analyze_by_custom_model.py.bak && \
+    mv ~/doc_analyze_by_custom_model.py /usr/local/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/ && \
+    #===========
+    # wget -q http://172.17.0.1:3000/ch_PP-OCRv4_det_infer_linux_aarch64.om -P /root && \
+    # wget -q http://172.17.0.1:3000/ch_PP-OCRv4_rec_infer_linux_aarch64.om -P /root && \
+    # wget -q http://172.17.0.1:3000/ch_ppocr_mobile_v2.0_cls_infer_linux_aarch64.om -P /root && \
+    # mv ~/ch_PP-OCRv4_det_infer_linux_aarch64.om /usr/local/python3.10.14/lib/python3.10/site-packages/rapidocr_onnxruntime/models/ && \
+    # mv ~/ch_PP-OCRv4_rec_infer_linux_aarch64.om /usr/local/python3.10.14/lib/python3.10/site-packages/rapidocr_onnxruntime/models/ && \
+    # mv ~/ch_ppocr_mobile_v2.0_cls_infer_linux_aarch64.om /usr/local/python3.10.14/lib/python3.10/site-packages/rapidocr_onnxruntime/models/ && \
+    #===========
+    wget -q http://172.17.0.1:3000/predict_det.py -P /root && \
+    wget -q http://172.17.0.1:3000/predict_rec.py -P /root && \
+    wget -q http://172.17.0.1:3000/utility.py -P /root && \
+    mv /usr/local/python3.10.14/lib/python3.10/site-packages/paddleocr/tools/infer/predict_det.py /usr/local/python3.10.14/lib/python3.10/site-packages/paddleocr/tools/infer/predict_det.py.bak && \
+    mv /usr/local/python3.10.14/lib/python3.10/site-packages/paddleocr/tools/infer/predict_rec.py /usr/local/python3.10.14/lib/python3.10/site-packages/paddleocr/tools/infer/predict_rec.py.bak && \
+    mv /usr/local/python3.10.14/lib/python3.10/site-packages/paddleocr/tools/infer/utility.py /usr/local/python3.10.14/lib/python3.10/site-packages/paddleocr/tools/infer/utility.py.bak && \
+    mv ~/predict_det.py /usr/local/python3.10.14/lib/python3.10/site-packages/paddleocr/tools/infer/ && \
+    mv ~/predict_rec.py /usr/local/python3.10.14/lib/python3.10/site-packages/paddleocr/tools/infer/ && \
+    mv ~/utility.py /usr/local/python3.10.14/lib/python3.10/site-packages/paddleocr/tools/infer/ && \
+    #===========
+    wget -q http://172.17.0.1:3000/config.yaml -P /root && \
+    mv /usr/local/python3.10.14/lib/python3.10/site-packages/rapidocr_onnxruntime/config.yaml /usr/local/python3.10.14/lib/python3.10/site-packages/rapidocr_onnxruntime/config.yaml.bak && \
+    mv ~/config.yaml /usr/local/python3.10.14/lib/python3.10/site-packages/rapidocr_onnxruntime/ && \
+    #===========
+    wget -q http://172.17.0.1:3000/infer_engine.py -P /root && \
+    mv /usr/local/python3.10.14/lib/python3.10/site-packages/rapidocr_onnxruntime/utils/infer_engine.py /usr/local/python3.10.14/lib/python3.10/site-packages/rapidocr_onnxruntime/utils/infer_engine.py.bak && \
+    mv ~/infer_engine.py /usr/local/python3.10.14/lib/python3.10/site-packages/rapidocr_onnxruntime/utils/ && \
+    #===========
+    wget -q http://172.17.0.1:3000/rapid_table.py -P /root && \
+    mv /usr/local/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/sub_modules/table/rapidtable/rapid_table.py /usr/local/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/sub_modules/table/rapidtable/rapid_table.py.bak && \
+    mv ~/rapid_table.py /usr/local/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/sub_modules/table/rapidtable/ && \
+    #===========
+    # wget -q http://172.17.0.1:3000/unitable_decoder.pth -P /root && \
+    # wget -q http://172.17.0.1:3000/unitable_encoder.pth -P /root && \
+    # wget -q http://172.17.0.1:3000/unitable_vocab.json -P /root && \
+    # mv ~/unitable_decoder.pth /usr/local/python3.10.14/lib/python3.10/site-packages/rapid_table/models/ && \
+    # mv ~/unitable_encoder.pth /usr/local/python3.10.14/lib/python3.10/site-packages/rapid_table/models/ && \
+    # mv ~/unitable_vocab.json /usr/local/python3.10.14/lib/python3.10/site-packages/rapid_table/models/ && \
+    #===========
+    wget -q http://172.17.0.1:3000/ppocr_273_mod.py -P /root && \
+    mv /usr/local/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/sub_modules/ocr/paddleocr/ppocr_273_mod.py /usr/local/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/sub_modules/ocr/paddleocr/ppocr_273_mod.py.bak && \
+    mv ~/ppocr_273_mod.py /usr/local/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/sub_modules/ocr/paddleocr/ && \
+    #===========
+    echo "source /usr/local/Ascend/driver/bin/setenv.bash" >> ~/.bashrc && \
+    echo "source /usr/local/Ascend/ascend-toolkit/set_env.sh" >> ~/.bashrc
