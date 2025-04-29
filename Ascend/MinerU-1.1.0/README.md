@@ -23,7 +23,7 @@
   | detectron2              | NA          | git之后通过tar压缩使用，https://github.com/facebookresearch/detectron2                                                                                      | 
   | magic-pdf               | 1.1.0       | https://github.com/opendatalab/MinerU/releases                                                                                                            |
 
-注，构建工程所需模型侧相关文件变更及替换，请参考 `npuAdapter/MinerU-1.1.0/` 预先准备。
+注，构建工程所需模型侧相关文件变更及替换，请参考 [npuAdapter/MinerU-1.1.0/](https://github.com/stephenfuyuxin/npuAdapter/tree/main/MinerU-1.1.0) 预先准备。
 
 # 不同用户使用不同的 dockerfile-xxxx
 针对镜像启动所使用的用户，以 root 和 非root 用户分类，
