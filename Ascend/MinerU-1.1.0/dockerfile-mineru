@@ -138,6 +138,7 @@ FROM torchvisionnpu AS msit
 RUN wget -q http://172.17.0.1:3000/msit.tar -P /home/mineru && \
     tar -xzvf msit.tar && \
     cd ~/msit/msit/ && \
+    pip install wheel==0.45.1 && \
     pip3 install . && \
     msit download all --dest ./pkg-cache && \
     cd ~ && \
@@ -179,26 +180,26 @@ RUN wget -q http://172.17.0.1:3000/magic_pdf-1.1.0-py3-none-any.whl -P /home/min
 ###########################
 FROM magicpdf AS mineru
 
-   #===========
-   # wget -q http://172.17.0.1:3000/mineru-modelscope.tar -P /home/mineru && \
-   # tar -xzvf mineru-modelscope.tar -C /home/mineru/.cache/ && \
-   # rm -f mineru-modelscope.tar && \
-   #===========
-   # wget -q http://172.17.0.1:3000/paddleocr.tar -P /home/mineru && \
-   # tar -xzvf paddleocr.tar -C /home/mineru/ && \
-   # rm -f paddleocr.tar && \
-   #===========
+    #===========
+    # wget -q http://172.17.0.1:3000/mineru-modelscope.tar -P /home/mineru && \
+    # tar -xzvf mineru-modelscope.tar -C /home/mineru/.cache/ && \
+    # rm -f mineru-modelscope.tar && \
+    #===========
+    # wget -q http://172.17.0.1:3000/paddleocr.tar -P /home/mineru && \
+    # tar -xzvf paddleocr.tar -C /home/mineru/ && \
+    # rm -f paddleocr.tar && \
+    #===========
 RUN wget -q http://172.17.0.1:3000/magic-pdf.json -P /home/mineru && \
     wget -q http://172.17.0.1:3000/doc_analyze_by_custom_model.py -P /home/mineru && \
     mv ~/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/doc_analyze_by_custom_model.py ~/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/doc_analyze_by_custom_model.py.bak && \
     mv ~/doc_analyze_by_custom_model.py ~/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/ && \
     #===========
-    wget -q http://172.17.0.1:3000/ch_PP-OCRv4_det_infer_linux_aarch64.om -P /home/mineru && \
-    wget -q http://172.17.0.1:3000/ch_PP-OCRv4_rec_infer_linux_aarch64.om -P /home/mineru && \
-    wget -q http://172.17.0.1:3000/ch_ppocr_mobile_v2.0_cls_infer_linux_aarch64.om -P /home/mineru && \
-    mv ~/ch_PP-OCRv4_det_infer_linux_aarch64.om ~/python3.10.14/lib/python3.10/site-packages/rapidocr_onnxruntime/models/ && \
-    mv ~/ch_PP-OCRv4_rec_infer_linux_aarch64.om ~/python3.10.14/lib/python3.10/site-packages/rapidocr_onnxruntime/models/ && \
-    mv ~/ch_ppocr_mobile_v2.0_cls_infer_linux_aarch64.om ~/python3.10.14/lib/python3.10/site-packages/rapidocr_onnxruntime/models/ && \
+    # wget -q http://172.17.0.1:3000/ch_PP-OCRv4_det_infer_linux_aarch64.om -P /home/mineru && \
+    # wget -q http://172.17.0.1:3000/ch_PP-OCRv4_rec_infer_linux_aarch64.om -P /home/mineru && \
+    # wget -q http://172.17.0.1:3000/ch_ppocr_mobile_v2.0_cls_infer_linux_aarch64.om -P /home/mineru && \
+    # mv ~/ch_PP-OCRv4_det_infer_linux_aarch64.om ~/python3.10.14/lib/python3.10/site-packages/rapidocr_onnxruntime/models/ && \
+    # mv ~/ch_PP-OCRv4_rec_infer_linux_aarch64.om ~/python3.10.14/lib/python3.10/site-packages/rapidocr_onnxruntime/models/ && \
+    # mv ~/ch_ppocr_mobile_v2.0_cls_infer_linux_aarch64.om ~/python3.10.14/lib/python3.10/site-packages/rapidocr_onnxruntime/models/ && \
     #===========
     wget -q http://172.17.0.1:3000/predict_det.py -P /home/mineru && \
     wget -q http://172.17.0.1:3000/predict_rec.py -P /home/mineru && \
@@ -222,12 +223,12 @@ RUN wget -q http://172.17.0.1:3000/magic-pdf.json -P /home/mineru && \
     mv ~/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/sub_modules/table/rapidtable/rapid_table.py ~/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/sub_modules/table/rapidtable/rapid_table.py.bak && \
     mv ~/rapid_table.py ~/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/sub_modules/table/rapidtable/ && \
     #===========
-    wget -q http://172.17.0.1:3000/unitable_decoder.pth -P /home/mineru && \
-    wget -q http://172.17.0.1:3000/unitable_encoder.pth -P /home/mineru && \
-    wget -q http://172.17.0.1:3000/unitable_vocab.json -P /home/mineru && \
-    mv ~/unitable_decoder.pth ~/python3.10.14/lib/python3.10/site-packages/rapid_table/models/ && \
-    mv ~/unitable_encoder.pth ~/python3.10.14/lib/python3.10/site-packages/rapid_table/models/ && \
-    mv ~/unitable_vocab.json ~/python3.10.14/lib/python3.10/site-packages/rapid_table/models/ && \
+    # wget -q http://172.17.0.1:3000/unitable_decoder.pth -P /home/mineru && \
+    # wget -q http://172.17.0.1:3000/unitable_encoder.pth -P /home/mineru && \
+    # wget -q http://172.17.0.1:3000/unitable_vocab.json -P /home/mineru && \
+    # mv ~/unitable_decoder.pth ~/python3.10.14/lib/python3.10/site-packages/rapid_table/models/ && \
+    # mv ~/unitable_encoder.pth ~/python3.10.14/lib/python3.10/site-packages/rapid_table/models/ && \
+    # mv ~/unitable_vocab.json ~/python3.10.14/lib/python3.10/site-packages/rapid_table/models/ && \
     #===========
     wget -q http://172.17.0.1:3000/ppocr_273_mod.py -P /home/mineru && \
     mv ~/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/sub_modules/ocr/paddleocr/ppocr_273_mod.py ~/python3.10.14/lib/python3.10/site-packages/magic_pdf/model/sub_modules/ocr/paddleocr/ppocr_273_mod.py.bak && \
