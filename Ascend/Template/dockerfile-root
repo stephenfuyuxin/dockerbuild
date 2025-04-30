@@ -1,0 +1,138 @@
+############################
+# From Ubuntu22.04 AS base #
+############################
+# 不做额外说明，默认都为 ubuntu22.04 作为基础镜像
+FROM ubuntu:22.04 AS base
+LABEL maintainer="fuyuxin"
+
+ARG UBUNTU_VERSION=22.04
+ARG ARCH
+ARG DEVICE
+ARG PYTHON_VERSION
+LABEL description="Image for ${DEVICE} based on Ubuntu${UBUNTU_VERSION} ${ARCH}"
+
+# 这里用于定义非 root 用户，若无特定诉求默认使用 HwHiAiUser，userid、groupid 都可根据实际情况进行修改，如1001 1001
+RUN groupadd -g 1000 HwHiAiUser && \
+    useradd -d /home/HwHiAiUser -m -u 1000 -g 1000 -s /bin/bash HwHiAiUser && \
+    chmod -R 750 /home/HwHiAiUser
+
+# base阶段，宿主机OS apt-get install 必须使用 root 用户进行安装
+USER root
+WORKDIR /root
+
+# 设置 Ascend 驱动/固件所需环境变量，镜像启动通过 -v 引入驱动/固件目录生效
+ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64/driver:/usr/local/Ascend/driver/lib64/common:$LD_LIBRARY_PATH \
+    TZ=Asia/Shanghai \
+    LANG=en_US.UTF-8 \
+    LANGUAGE=en_US:en \
+    LC_ALL=en_US.UTF-8
+
+    # 若有特殊需求，需使用特定 apt-get install 源，使用文件传递方式可生效，在 dockerfile 中使用 echo deb, echo deb-src 方式存在问题
+    #apt-get clean && apt-get update && apt-get install --no-install-recommends -y wget && \
+    #mv /etc/apt/sources.list /etc/apt/sources.list.bak && \
+    #wget -q http://172.17.0.1:3000/sources.list -P /etc/apt/ && \
+RUN apt-get clean && apt-get update && \
+    # 交互式安装 apt-get install，可多行，通过 “&& \” 换行
+    apt-get install --no-install-recommends -y xxx yyy xxx && \
+    # 非交互式安装 apt-get install，可多行，通过 “&& \” 换行
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xxx yyy zzz && \
+    locale-gen en_US.UTF-8 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+##########################
+# FROM base AS miniconda #
+##########################
+# Miniconda3 安装部署，提前准备好包和脚本并放置工作目录。如果是 Kubernetes 生产环境，需预先沟通是否可以在 Pod 容器中再启 conda 隔离环境
+#FROM base AS miniconda
+#
+#RUN wget -q http://172.17.0.1:3000/Miniconda3-latest-Linux-aarch64.sh -P ~/ && \
+#    wget -q http://172.17.0.1:3000/install_miniconda3.sh -P ~/ && \
+#    #===========
+#    bash install_miniconda3.sh && \
+#    #===========
+#    rm -rf ~/*.sh
+##########################
+# From base AS pythonpip #
+##########################
+# Python和Pip 安装部署，提前准备好Python对应版本的包并放置工作目录
+FROM base AS pythonpip
+
+ARG ARCH
+ARG DEVICE
+ARG PYTHON_VERSION
+
+# Python3 install and configuraiton. Install Python3.x according the 'ARG' PYTHON_VERSION, below:
+RUN wget -q http://172.17.0.1:3000/Python-${PYTHON_VERSION}.tar.xz -P ~/ && \
+    tar -xf Python-${PYTHON_VERSION}.tar.xz && \
+    cd Python-${PYTHON_VERSION} && ./configure --prefix=/usr/local/python${PYTHON_VERSION} --enable-shared --enable-loadable-sqlite-extensions --enable-optimizations && \
+    make -j8 && make install && \
+    ln -sf /usr/local/python${PYTHON_VERSION}/bin/python3 /usr/bin/python3 && \
+    ln -sf /usr/local/python${PYTHON_VERSION}/bin/python3 /usr/bin/python && \
+    ln -sf /usr/local/python${PYTHON_VERSION}/bin/pip3 /usr/bin/pip3 && \
+    ln -sf /usr/local/python${PYTHON_VERSION}/bin/pip3 /usr/bin/pip && \
+    cd .. && \
+    rm -rf Python-* && \
+    #===========
+    # Pip3 source and install. Configure the pip3 source. An example is provided below:
+    mkdir -p ~/.pip  && \
+    echo '[global] \n\
+    index-url = https://mirrors.huaweicloud.com/repository/pypi/simple\n\
+    trusted-host = mirrors.huaweicloud.com\n\
+    timeout = 120' >> ~/.pip/pip.conf
+ENV PATH=/usr/local/python${PYTHON_VERSION}/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/python${PYTHON_VERSION}/lib:$LD_LIBRARY_PATH
+##########################
+# FROM pythonpip AS cann #
+##########################
+# CANN 相关安装部署，根据实际情况提前准备好 toolkit、kernels、nnal 的包及安装脚本并放置工作目录
+FROM pythonpip AS cann
+
+ARG DEVICE
+ARG ARCH
+ARG CANN_VERSION
+
+# 环境变量 ASCEND_TOOLKIT_HOME 设置根据root和非root用户进行区分
+#ASCEND_TOOLKIT_HOME=/home/HwHiAiUser/Ascend/ascend-toolkit/latest
+ENV ASCEND_TOOLKIT_HOME=/usr/local/Ascend/ascend-toolkit/latest \
+    LD_LIBRARY_PATH=${ASCEND_TOOLKIT_HOME}/lib64:${ASCEND_TOOLKIT_HOME}/lib64/plugin/opskernel:$LD_LIBRARY_PATH \
+    LD_LIBRARY_PATH=${ASCEND_TOOLKIT_HOME}/lib64/plugin/nnengine:${ASCEND_TOOLKIT_HOME}/opp/built-in/op_impl/ai_core/tbe/op_tiling/lib/linux/${ARCH}:$LD_LIBRARY_PATH \
+    LD_LIBRARY_PATH=${ASCEND_TOOLKIT_HOME}/tools/aml/lib64:${ASCEND_TOOLKIT_HOME}/tools/aml/lib64/plugin:$LD_LIBRARY_PATH \
+    PYTHONPATH=${ASCEND_TOOLKIT_HOME}/python/site-packages:${ASCEND_TOOLKIT_HOME}/opp/built-in/op_impl/ai_core/tbe:$PYTHONPATH \
+    PATH=$PATH:${ASCEND_TOOLKIT_HOME}/bin:${ASCEND_TOOLKIT_HOME}/compiler/ccec_compiler/bin:${ASCEND_TOOLKIT_HOME}/tools/ccec_compiler/bin \
+    ASCEND_AICPU_PATH=${ASCEND_TOOLKIT_HOME} \
+    ASCEND_OPP_PATH=${ASCEND_TOOLKIT_HOME}/opp \
+    TOOLCHAIN_HOME=${ASCEND_TOOLKIT_HOME}/toolkit \
+    ASCEND_HOME_PATH=${ASCEND_TOOLKIT_HOME}
+RUN wget -q http://172.17.0.1:3000/Ascend-cann-toolkit_${CANN_VERSION}_linux-${ARCH}.run -P ~/ && \
+    wget -q http://172.17.0.1:3000/Ascend-cann-kernels-${DEVICE}_${CANN_VERSION}_linux-${ARCH}.run -P ~/ && \
+    wget -q http://172.17.0.1:3000/Ascend-cann-nnal_{CANN_VERSION}_linux-{ARCH}.run -P ~/ && \
+    wget -q http://172.17.0.1:3000/install_cann.sh -P ~/ && \
+    #===========
+    bash install_cann.sh && \
+    #===========
+    rm -rf ~/*.run ~/install_*.sh
+####################
+# FROM cann AS pta #
+####################
+# Pytorch Adapter 相关安装部署，根据实际情况提前准备好 torch、torch_npu、apex 的 .whl 包及安装脚本并放置工作目录
+FROM cann AS pta
+
+ARG DEVICE
+ARG ARCH
+ARG TORCH_VERSION
+ARG PY_VERSION
+
+RUN wget -q http://172.17.0.1:3000/torch-${TORCH_VERSION}-cp${PY_VERSION}-cp${PY_VERSION}-manylinux_2_17_${ARCH}.manylinux2014_${ARCH}.whl -P ~/ && \
+    wget -q http://172.17.0.1:3000/torch_npu-${TORCH_VERSION}.post8-cp${PY_VERSION}-cp${PY_VERSION}-manylinux_2_17_${ARCH}.manylinux2014_${ARCH}.whl -P ~/ && \
+    wget -q http://172.17.0.1:3000/apex-0.1+ascend-cp${PY_VERSION}-cp${PY_VERSION}-${ARCH}.whl -P ~/ && \
+    wget -q http://172.17.0.1:3000/requirements-${TORCH_VERSION}.txt -P ~/ && \
+    wget -q http://172.17.0.1:3000/install_pta.sh -P ~/ && \
+    #===========
+    pip3 install --upgrade pip && \
+    pip3 install -r requirements-${TORCH_VERSION}.txt --no-cache-dir && \
+    #===========
+    bash install_pta.sh && \
+    pip cache purge && \
+    rm -rf ~/*.whl ~/install_*.sh && \
+    rm -rf ~/.cache/pip
+####################
