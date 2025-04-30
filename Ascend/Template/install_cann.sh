@@ -20,8 +20,12 @@ if [ ${kernels_status} -eq 0 ]; then
 else
     echo "install kernels failed with status ${kernels_status}"
 fi
-source ~/Ascend/ascend-toolkit/set_env.sh
 
+# before install nnal, which "source" decided according USER,
+# for root
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+# for non-root
+#source ~/Ascend/ascend-toolkit/set_env.sh
 yes | ./${CANN_NNAL} --install --quiet
 nnal_status=$?
 if [ ${nnal_status} -eq 0 ]; then
