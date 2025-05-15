@@ -1,0 +1,121 @@
+############################
+# From Ubuntu22.04 AS base #
+############################
+FROM ubuntu:22.04 AS base
+LABEL maintainer="fuyuxin"
+
+ARG UBUNTU_VERSION=22.04
+ARG ARCH
+ARG DEVICE
+ARG PYTHON_VERSION
+LABEL description="Image for ${DEVICE} based on Ubuntu${UBUNTU_VERSION} ${ARCH}"
+
+RUN groupadd -g 1001 HwHiAiUser && \
+    useradd -d /home/HwHiAiUser -m -u 1001 -g 1001 -s /bin/bash HwHiAiUser && \
+    chmod -R 750 /home/HwHiAiUser
+
+WORKDIR /home/HwHiAiUser
+
+ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64/driver:/usr/local/Ascend/driver/lib64/common:$LD_LIBRARY_PATH \
+    TZ=Asia/Shanghai \
+    LANG=en_US.UTF-8 \
+    LANGUAGE=en_US:en \
+    LC_ALL=en_US.UTF-8
+
+RUN apt-get clean && apt-get update && \
+    apt install --no-install-recommends -y gcc g++ make cmake zlib1g zlib1g-dev openssl libsqlite3-dev libssl-dev libffi-dev && \
+    apt install --no-install-recommends -y libbz2-dev libxslt1-dev unzip pciutils net-tools libblas-dev gfortran libblas3 ca-certificates && \
+    apt install --no-install-recommends -y bc wget curl pkg-config liblapack3 vim liblapack-dev libhdf5-dev xz-utils cython3 python3-h5py && \
+    apt install --no-install-recommends -y libopenblas-dev libgmpxx4ldbl liblzma-dev libxml2 libgl1-mesa-glx git numactl linux-tools-common ipmitool -y && \
+    # ResNet50 for Pytorch
+    apt install --no-install-recommends -y patch && \
+    # LivePortrait for Pytorch
+    apt install --no-install-recommends -y ffmpeg && \
+    apt-get --fix-broken install -y && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends locales python3-pip python-is-python3 tzdata gdb tcpdump tmux neovim htop && \
+    locale-gen en_US.UTF-8 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    #===========
+    # Python3 install and configuraiton. Install Python3.x according the 'ARG' PYTHON_VERSION, below:
+    curl -k https://mirrors.huaweicloud.com/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz -o Python-${PYTHON_VERSION}.tar.xz && \
+    tar -xf Python-${PYTHON_VERSION}.tar.xz && \
+    cd Python-${PYTHON_VERSION} && ./configure --prefix=/usr/local/python${PYTHON_VERSION} --enable-shared --enable-loadable-sqlite-extensions --enable-optimizations && \
+    make -j8 && make install && \
+    ln -sf /usr/local/python${PYTHON_VERSION}/bin/python3 /usr/bin/python3 && \
+    ln -sf /usr/local/python${PYTHON_VERSION}/bin/python3 /usr/bin/python && \
+    ln -sf /usr/local/python${PYTHON_VERSION}/bin/pip3 /usr/bin/pip3 && \
+    ln -sf /usr/local/python${PYTHON_VERSION}/bin/pip3 /usr/bin/pip && \
+    cd .. && \
+    rm -rf Python* && \
+    #===========
+    # Pip3 source and install. Configure the pip3 source. An example is provided below:
+    mkdir -p ~/.pip  && \
+    echo '[global] \n\
+    index-url = https://mirrors.huaweicloud.com/repository/pypi/simple\n\
+    trusted-host = mirrors.huaweicloud.com\n\
+    timeout = 120' >> ~/.pip/pip.conf
+USER HwHiAiUser
+#####################
+# FROM base AS cann #
+#####################
+FROM base AS cann
+
+ARG DEVICE
+ARG ARCH
+ARG CANN_VERSION
+
+# CANN-TOOLKIT env
+#ASCEND_TOOLKIT_HOME=/usr/local/Ascend/ascend-toolkit/latest
+ENV ASCEND_TOOLKIT_HOME=/home/HwHiAiUser/Ascend/ascend-toolkit/latest \
+    LD_LIBRARY_PATH=${ASCEND_TOOLKIT_HOME}/lib64:${ASCEND_TOOLKIT_HOME}/lib64/plugin/opskernel:$LD_LIBRARY_PATH \
+    LD_LIBRARY_PATH=${ASCEND_TOOLKIT_HOME}/lib64/plugin/nnengine:${ASCEND_TOOLKIT_HOME}/opp/built-in/op_impl/ai_core/tbe/op_tiling/lib/linux/${ARCH}:$LD_LIBRARY_PATH \
+    LD_LIBRARY_PATH=${ASCEND_TOOLKIT_HOME}/tools/aml/lib64:${ASCEND_TOOLKIT_HOME}/tools/aml/lib64/plugin:$LD_LIBRARY_PATH \
+    PYTHONPATH=${ASCEND_TOOLKIT_HOME}/python/site-packages:${ASCEND_TOOLKIT_HOME}/opp/built-in/op_impl/ai_core/tbe:$PYTHONPATH \
+    PATH=${ASCEND_TOOLKIT_HOME}/bin:${ASCEND_TOOLKIT_HOME}/compiler/ccec_compiler/bin:${ASCEND_TOOLKIT_HOME}/tools/ccec_compiler/bin:$PATH \
+    ASCEND_AICPU_PATH=${ASCEND_TOOLKIT_HOME} \
+    ASCEND_OPP_PATH=${ASCEND_TOOLKIT_HOME}/opp \
+    TOOLCHAIN_HOME=${ASCEND_TOOLKIT_HOME}/toolkit \
+    ASCEND_HOME_PATH=${ASCEND_TOOLKIT_HOME}
+RUN wget -q http://172.17.0.1:3000/Ascend-cann-toolkit_${CANN_VERSION}_linux-${ARCH}.run -P /home/HwHiAiUser && \
+    wget -q http://172.17.0.1:3000/Ascend-cann-kernels-${DEVICE}_${CANN_VERSION}_linux-${ARCH}.run -P /home/HwHiAiUser && \
+    wget -q http://172.17.0.1:3000/install_cann.sh -P /home/HwHiAiUser && \
+    #===========
+    bash install_cann.sh && \
+    #===========
+    rm -rf ~/*.run ~/install_*.sh
+####################
+# FROM cann AS pta #
+####################
+FROM cann AS pta
+
+ARG DEVICE
+ARG ARCH
+ARG TORCH_VERSION
+ARG PY_VERSION
+
+ENV PATH=$PATH:/home/HwHiAiUser/.local/bin
+
+RUN wget -q http://172.17.0.1:3000/torch-${TORCH_VERSION}-cp${PY_VERSION}-cp${PY_VERSION}-manylinux_2_17_${ARCH}.manylinux2014_${ARCH}.whl -P /home/HwHiAiUser && \
+    wget -q http://172.17.0.1:3000/torch_npu-${TORCH_VERSION}.post8-cp${PY_VERSION}-cp${PY_VERSION}-manylinux_2_17_${ARCH}.manylinux2014_${ARCH}.whl -P /home/HwHiAiUser && \
+    #wget -q http://172.17.0.1:3000/apex-0.1.dev20241029+ascend-cp${PY_VERSION}-cp${PY_VERSION}-linux_${ARCH}.whl -P /home/HwHiAiUser && \
+    wget -q http://172.17.0.1:3000/requirements-${TORCH_VERSION}.txt -P /home/HwHiAiUser && \
+    wget -q http://172.17.0.1:3000/install_pta.sh -P /home/HwHiAiUser && \
+    #===========
+    pip3 install -r requirements-${TORCH_VERSION}.txt --no-cache-dir && \
+    #===========
+    bash install_pta.sh && \
+    #===========
+    pip cache purge && \
+    rm -rf ~/torch*.whl ~/requirements*.txt ~/install_*.sh && \
+    rm -rf ~/.cache/pip
+############################
+# FROM pta AS liveportrait #
+############################
+FROM pta AS liveportrait
+
+RUN wget -q http://172.17.0.1:3000/LivePortrait.tar -P /home/HwHiAiUser && \
+    tar -xzvf LivePortrait.tar && \
+    rm -f LivePortrait.tar && \
+	echo "source /usr/local/Ascend/driver/bin/setenv.bash" >> ~/.bashrc && \
+	echo "source /home/HwHiAiUser/Ascend/ascend-toolkit/set_env.sh" >> ~/.bashrc
