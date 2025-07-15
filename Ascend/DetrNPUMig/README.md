@@ -19,6 +19,33 @@ detr-dockerbuild# tree
 └── torch_npu-2.1.0.post12-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl
 ```
 
+# ais_bench（aclruntime、ais_bench）
+https://gitee.com/ascend/tools/tree/master/ais-bench_workload/tool/ais_bench
+
+# coco_data.tar
+https://blog.csdn.net/qq_41847324/article/details/86224628
+
+训练集的标签：http://images.cocodataset.org/annotations/annotations_trainval2017.zip
+
+验证集：http://images.cocodataset.org/zips/val2017.zip
+
+```shell
+unzip val2017.zip
+unzip annotations_trainval2017.zip
+mkdir coco_data
+mv annotations coco_data
+mv val2017 coco_data
+# coco_data目录结构需满足:
+coco_data
+    ├── annotations
+    └── val2017
+```
+
+# resnet50-0676ba61.pth
+```shell
+Downloading: "https://download.pytorch.org/models/resnet50-0676ba61.pth" to /root/.cache/torch/hub/checkpoints/resnet50-0676ba61.pth
+```
+
 # dockerbuild.sh
 ```shell
 # vim dockerbuild.sh
