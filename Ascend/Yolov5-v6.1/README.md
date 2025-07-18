@@ -17,6 +17,18 @@ yolov5-dockerbuild# tree
 └── yolov5.tar
 ```
 
+# msit
+访问 msit 推理工具代码仓，根据 readme 文档进行工具安装 msit benchmark / msit surgeon 组件，
+```shell
+Ascend/msit：
+https://gitee.com/ascend/msit/tree/master/msit/#/ascend/msit/blob/master/msit/./docs/install/README.md
+```
+通过 git 获取 msit 之后，以 .tar 形式进行压缩，工程构建时通过 wget 获取 .tar 解压缩安装使用，
+```shell
+# git clone https://gitee.com/ascend/msit.git
+# tar -czvf msit.tar msit/
+```
+
 # ais_bench（aclruntime、ais_bench）
 https://gitee.com/ascend/tools/tree/master/ais-bench_workload/tool/ais_bench
 
@@ -41,7 +53,7 @@ coco
 ```
 
 # Arial.ttf
-构建工程中，下载 Arial.ttf 容易失败而导致整个构建工程异常退出，预先手动下载，放到目标路径，
+构建工程中，下载 Arial.ttf 容易失败，预先手动下载，放到目标路径，
 
 下载链接：https://ultralytics.com/assets/Arial.ttf
 ```shell
