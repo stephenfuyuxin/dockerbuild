@@ -1,0 +1,190 @@
+############################
+# From Ubuntu22.04 AS base #
+############################
+FROM ubuntu:22.04 AS base
+LABEL maintainer="fuyuxin"
+
+ARG UBUNTU_VERSION=22.04
+ARG ARCH
+ARG DEVICE
+ARG PYTHON_VERSION
+LABEL description="Image for ${DEVICE} based on Ubuntu${UBUNTU_VERSION} ${ARCH}"
+
+RUN groupadd -g 1000 HwHiAiUser && \
+    useradd -d /home/HwHiAiUser -m -u 1000 -g 1000 -s /bin/bash HwHiAiUser && \
+    chmod -R 750 /home/HwHiAiUser
+
+# base阶段，宿主机OS apt-get install 必须使用 root 用户进行安装
+USER root
+WORKDIR /root
+
+ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64/driver:/usr/local/Ascend/driver/lib64/common:$LD_LIBRARY_PATH \
+    TZ=Asia/Shanghai \
+    LANG=en_US.UTF-8 \
+    LANGUAGE=en_US:en \
+    LC_ALL=en_US.UTF-8
+
+RUN apt-get clean && apt-get update && \
+    #apt-get install --no-install-recommends -y xxx yyy zzz \
+    DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y vim-tiny vim sudo git wget zip unzip tar curl gzip && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y ca-certificates netbase tzdata util-linux findutils pciutils && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y apt-transport-https bash build-essential xz-utils locales && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y cmake libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev libglu1-mesa-dev mesa-common-dev libglx-mesa0 libgbm-dev && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y zlib1g-dev libssl-dev libffi-dev build-essential && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y dpkg-dev gcc gnupg libbluetooth-dev libbz2-dev libc6-dev libdb-dev libffi-dev libgdbm-dev liblzma-dev libncursesw5-dev libreadline-dev libsqlite3-dev libssl-dev make tk-dev uuid-dev xz-utils zlib1g-dev && \
+    locale-gen en_US.UTF-8 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    rm -rf /var/tmp/* && \
+    rm -rf /tmp/*
+##########################
+# From base AS pythonpip #
+##########################
+FROM base AS pythonpip
+
+ARG ARCH
+ARG DEVICE
+ARG PYTHON_VERSION
+
+# Python3 install and configuraiton. Install Python3.x according the 'ARG' PYTHON_VERSION, below:
+# curl -k https://mirrors.huaweicloud.com/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz -o Python-${PYTHON_VERSION}.tar.xz && \
+RUN wget -q http://172.17.0.1:3000/Python-${PYTHON_VERSION}.tar.xz -P ~/ && \
+    tar -xf Python-${PYTHON_VERSION}.tar.xz && \
+    cd Python-${PYTHON_VERSION} && ./configure --prefix=/usr/local/python${PYTHON_VERSION} --enable-shared --enable-loadable-sqlite-extensions --enable-optimizations && \
+    make -j8 && make install && \
+    ln -sf /usr/local/python${PYTHON_VERSION}/bin/python3 /usr/bin/python3 && \
+    ln -sf /usr/local/python${PYTHON_VERSION}/bin/python3 /usr/bin/python && \
+    ln -sf /usr/local/python${PYTHON_VERSION}/bin/pip3 /usr/bin/pip3 && \
+    ln -sf /usr/local/python${PYTHON_VERSION}/bin/pip3 /usr/bin/pip && \
+    cd .. && \
+    rm -rf Python-* && \
+    rm -rf /tmp/* && \
+    #===========
+    # Pip3 source and install. Configure the pip3 source. An example is provided below:
+    mkdir -p ~/.pip  && \
+    echo '[global] \n\
+    index-url = https://mirrors.huaweicloud.com/repository/pypi/simple\n\
+    trusted-host = mirrors.huaweicloud.com\n\
+    timeout = 120' >> ~/.pip/pip.conf
+ENV PATH=/usr/local/python${PYTHON_VERSION}/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/python${PYTHON_VERSION}/lib:$LD_LIBRARY_PATH
+##########################
+# FROM pythonpip AS cann #
+##########################
+FROM pythonpip AS cann
+
+ARG DEVICE
+ARG ARCH
+ARG CANN_VERSION
+
+#环境变量 ASCEND_TOOLKIT_HOME 设置根据root和非root用户进行区分
+# ASCEND_TOOLKIT_HOME=/home/HwHiAiUser/Ascend/ascend-toolkit/latest
+ENV ASCEND_TOOLKIT_HOME=/usr/local/Ascend/ascend-toolkit/latest \
+    LD_LIBRARY_PATH=${ASCEND_TOOLKIT_HOME}/lib64:${ASCEND_TOOLKIT_HOME}/lib64/plugin/opskernel:$LD_LIBRARY_PATH \
+    LD_LIBRARY_PATH=${ASCEND_TOOLKIT_HOME}/lib64/plugin/nnengine:${ASCEND_TOOLKIT_HOME}/opp/built-in/op_impl/ai_core/tbe/op_tiling/lib/linux/${ARCH}:$LD_LIBRARY_PATH \
+    LD_LIBRARY_PATH=${ASCEND_TOOLKIT_HOME}/tools/aml/lib64:${ASCEND_TOOLKIT_HOME}/tools/aml/lib64/plugin:$LD_LIBRARY_PATH \
+    PYTHONPATH=${ASCEND_TOOLKIT_HOME}/python/site-packages:${ASCEND_TOOLKIT_HOME}/opp/built-in/op_impl/ai_core/tbe:$PYTHONPATH \
+    PATH=$PATH:${ASCEND_TOOLKIT_HOME}/bin:${ASCEND_TOOLKIT_HOME}/compiler/ccec_compiler/bin:${ASCEND_TOOLKIT_HOME}/tools/ccec_compiler/bin \
+    ASCEND_AICPU_PATH=${ASCEND_TOOLKIT_HOME} \
+    ASCEND_OPP_PATH=${ASCEND_TOOLKIT_HOME}/opp \
+    TOOLCHAIN_HOME=${ASCEND_TOOLKIT_HOME}/toolkit \
+    ASCEND_HOME_PATH=${ASCEND_TOOLKIT_HOME}
+RUN wget -q http://172.17.0.1:3000/Ascend-cann-toolkit_${CANN_VERSION}_linux-${ARCH}.run -P ~/ && \
+    wget -q http://172.17.0.1:3000/Ascend-cann-kernels-${DEVICE}_${CANN_VERSION}_linux-${ARCH}.run -P ~/ && \
+    wget -q http://172.17.0.1:3000/install_cann.sh -P ~/ && \
+    #===========
+    bash install_cann.sh && \
+    #===========
+    rm -rf ~/*.run ~/install_*.sh
+#####################
+# FROM cann AS msit #
+#####################
+FROM cann AS msit
+
+RUN wget -q http://172.17.0.1:3000/msit.tar -P ~/ && \
+    tar -xzvf ~/msit.tar && \
+    cd ~/msit/msit && \
+    pip install . && \
+    msit install benchmark && \
+    msit install surgeon && \
+    pip cache purge && \
+    rm -rf ~/.cache/pip && \
+    rm -f ~/msit.tar
+####################
+# FROM msit AS pta #
+####################
+FROM msit AS pta
+
+ARG DEVICE
+ARG ARCH
+ARG TORCH_VERSION
+ARG PY_VERSION
+
+RUN wget -q http://172.17.0.1:3000/torch-${TORCH_VERSION}-cp${PY_VERSION}-cp${PY_VERSION}-manylinux_2_17_${ARCH}.manylinux2014_${ARCH}.whl -P ~/ && \
+    wget -q http://172.17.0.1:3000/torch_npu-${TORCH_VERSION}.post12-cp${PY_VERSION}-cp${PY_VERSION}-manylinux_2_17_${ARCH}.manylinux2014_${ARCH}.whl -P ~/ && \
+    wget -q http://172.17.0.1:3000/requirements-yolov5.txt -P ~/ && \
+    wget -q http://172.17.0.1:3000/install_pta.sh -P ~/ && \
+    #===========
+    bash install_pta.sh && \
+    #===========
+    pip3 install --upgrade pip && \
+    pip3 install -r requirements-yolov5.txt --no-cache-dir --no-deps && \
+    #===========
+    pip cache purge && \
+    rm -rf ~/*.whl ~/install_*.sh ~/requirements-*.txt && \
+    rm -rf ~/.cache/pip
+######################
+# FROM pta AS yolov5 #
+######################
+FROM pta AS yolov5
+    
+    #= yolov5.tar ==========
+RUN wget -q http://172.17.0.1:3000/yolov5.tar -P ~/ && \
+    tar -xzvf ~/yolov5.tar && \
+    rm -f ~/yolov5.tar && \
+    #= Arial.ttf ==========
+    wget -q http://172.17.0.1:3000/Arial.ttf -P ~/ && \
+    mkdir -p ~/.config/Ultralytics/ && \
+    mv ~/Arial.ttf ~/.config/Ultralytics/ && \
+    #= ais_bench install ==========
+    wget -q http://172.17.0.1:3000/aclruntime-0.0.2-cp311-cp311-linux_aarch64.whl -P ~/ && \
+    wget -q http://172.17.0.1:3000/ais_bench-0.0.2-py3-none-any.whl -P ~/ && \
+    pip install ~/aclruntime-0.0.2-cp311-cp311-linux_aarch64.whl && \
+    pip install ~/ais_bench-0.0.2-py3-none-any.whl && \
+    pip cache purge && \
+    rm -rf ~/aclruntime-0.0.2-cp311-cp311-linux_aarch64.whl ~/ais_bench-0.0.2-py3-none-any.whl && \
+    rm -rf ~/.cache/pip && \
+    #= env ~/.bashrc ==========
+    echo "source /usr/local/Ascend/driver/bin/setenv.bash" >> ~/.bashrc && \
+    echo "source /usr/local/Ascend/ascend-toolkit/set_env.sh" >> ~/.bashrc
+
+#以下操作为镜像启动为容器之后的操作
+#进入 yolov5 源代码根目录
+# cd ~/yolov5/
+#
+#数据预处理
+# 数据集 coco 按要求处理并固化到 yolov5 源代码根目录下，
+# pwd
+# ~/yolov5/coco/
+#
+#模型转换，.pt 转 .onnx（--nms_mode nms_op）
+# bash pth2onnx.sh --tag 6.1 --model yolov5s --nms_mode nms_op
+# ll -h | grep onnx
+# 28M yolov5s.onnx
+# 28M yolov5s_nms.onnx
+#
+#模型转换，.onnx 转 .om（--nms_mode nms_op）（bs=4 / bs=8）
+# bash onnx2om.sh --tag 6.1 --model yolov5s_nms --nms_mode nms_op --bs 4 --soc Ascend910B4
+# bash onnx2om.sh --tag 6.1 --model yolov5s_nms --nms_mode nms_op --bs 8 --soc Ascend910B4
+# ll -h | grep om
+# 15M yolov5s_nms_bs4.om
+# 15M yolov5s_nms_bs8.om
+#
+#推理执行及精度验证（--nms_mode nms_op）（bs=4 / bs=8）
+# python om_val.py --tag 6.1 --model=yolov5s_nms_bs4.om --nms_mode nms_op --batch_size=4
+# python om_val.py --tag 6.1 --model=yolov5s_nms_bs8.om --nms_mode nms_op --batch_size=8
+#
+#推理性能验证（--nms_mode nms_op，通过 .om 体现）（bs=4 / bs=8）
+# python -m ais_bench --model=yolov5s_nms_bs4.om --loop=1000 --batchsize=4
+# python -m ais_bench --model=yolov5s_nms_bs8.om --loop=1000 --batchsize=8
+#
